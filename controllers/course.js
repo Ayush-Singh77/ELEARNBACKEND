@@ -156,23 +156,45 @@ export const addProgress = TryCatch(async (req, res) => {
 });
 
 export const getYourProgress = TryCatch(async (req, res) => {
-  const progress = await Progress.find({
-    user: req.user._id,
-    course: req.query.course,
+  const { course: courseId } = req.query;
+  const userId = req.user._id;
+
+  // 1. Validate courseId
+  if (!courseId) {
+    return res.status(400).json({ message: "Course ID is required" });
+  }
+
+  // 2. Find progress (returns an array)
+  const progressRecords = await Progress.find({
+    user: userId,
+    course: courseId,
   });
 
-  if (!progress) return res.status(404).json({ message: "null" });
+  // 3. If no progress exists, return default values
+  if (progressRecords.length === 0) {
+    const allLectures = (await Lecture.find({ course: courseId })).length;
+    return res.json({
+      courseProgressPercentage: 0,
+      completedLectures: 0,
+      allLectures,
+      progress: [],
+    });
+  }
 
-  const allLectures = (await Lecture.find({ course: req.query.course })).length;
+  // 4. Get completed lectures count
+  const completedLectures = progressRecords[0].completedLectures?.length || 0;
 
-  const completedLectures = progress[0].completedLectures.length;
+  // 5. Calculate total lectures
+  const allLectures = (await Lecture.find({ course: courseId })).length;
 
-  const courseProgressPercentage = (completedLectures * 100) / allLectures;
+  // 6. Calculate percentage (handle division by zero)
+  const courseProgressPercentage =
+    allLectures > 0 ? Math.round((completedLectures * 100) / allLectures) : 0;
 
   res.json({
     courseProgressPercentage,
     completedLectures,
     allLectures,
-    progress,
+    progress: progressRecords[0], // Send the first progress record
   });
 });
